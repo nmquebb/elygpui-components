@@ -107,3 +107,61 @@ fn blank_document_space_continues_writing_without_an_add_control(cx: &mut TestAp
     cx.simulate_input("Second.");
     assert_eq!(text(&document, cx), "First.\n\nSecond.");
 }
+
+#[gpui::test]
+fn task_boxes_center_on_the_first_text_line_in_every_rendered_mode(cx: &mut TestAppContext) {
+    use crate::{
+        DocumentLook,
+        theme::{ActiveTheme, TextSize},
+    };
+    let source = format!(
+        "- [ ] short\n- [x] {}\n  - [ ] nested\n",
+        "wrapped words ".repeat(35)
+    );
+    for mode in [
+        MarkdownMode::Visual,
+        MarkdownMode::Preview,
+        MarkdownMode::Split,
+    ] {
+        let (document, cx) = open(&source, mode, cx);
+        for scale in [1.0, 1.5] {
+            document.update(cx, |document, cx| {
+                document.set_look(
+                    DocumentLook {
+                        scale,
+                        ..DocumentLook::default()
+                    },
+                    cx,
+                )
+            });
+            super::frames(cx);
+            let line = cx.update(|window, cx| {
+                cx.theme()
+                    .text_size(TextSize::Base)
+                    .to_pixels(window.rem_size())
+                    * scale
+                    * 1.6
+            });
+            for (task, body) in [
+                (0, "markdown-list-body-0-0"),
+                (1, "markdown-list-body-0-1"),
+                (2, "markdown-list-body-1-0"),
+            ] {
+                let selector = Box::leak(format!("markdown-task-marker-{task}").into_boxed_str());
+                let mark = cx.debug_bounds(selector).expect("task marker");
+                let body = cx.debug_bounds(body).expect("task text");
+                if task == 1 {
+                    assert!(
+                        body.size.height > line * 2.0,
+                        "wrapped text and nested item"
+                    );
+                }
+                let offset = mark.center().y - (body.top() + line / 2.0);
+                assert!(
+                    offset.abs() < gpui::px(0.5),
+                    "{mode:?}, scale {scale}, task {task}: marker {mark:?}, text {body:?}, offset {offset:?}"
+                );
+            }
+        }
+    }
+}

@@ -1,6 +1,6 @@
 use gpui::{
-    AnyElement, App, FontWeight, IntoElement, MouseButton, ParentElement, Role, Styled, StyledText,
-    div, prelude::*,
+    AnyElement, App, FontWeight, IntoElement, MouseButton, ParentElement, RenderOnce, Role, Styled,
+    StyledText, Window, div, prelude::*,
 };
 
 use super::{Draw, point::point_lines};
@@ -58,6 +58,7 @@ impl Draw<'_> {
                     )
                     .child(
                         div()
+                            .debug_selector(move || format!("markdown-list-body-{depth}-{ix}"))
                             .flex_1()
                             .min_w_0()
                             .flex()
@@ -78,7 +79,7 @@ impl Draw<'_> {
         let colors = &cx.theme().colors;
         let task = self.tasks.get();
         self.tasks.set(task + 1);
-        match self.hooks.on_task {
+        let marker = match self.hooks.on_task {
             Some(on_task) => {
                 let on_task = on_task.clone();
                 let name = body
@@ -110,7 +111,15 @@ impl Draw<'_> {
             .size(IconSize::Sm)
             .color(if done { colors.focus } else { colors.fg_subtle })
             .into_any_element(),
-        }
+        };
+        TaskMarker(
+            div()
+                .debug_selector(move || format!("markdown-task-marker-{task}"))
+                .flex()
+                .child(marker)
+                .into_any_element(),
+        )
+        .into_any_element()
     }
 
     /// A GitHub alert: a colored rule, icon, title and body.
@@ -225,5 +234,18 @@ impl Draw<'_> {
             self.hooks.on_point,
             (false, false),
         )
+    }
+}
+
+#[derive(IntoElement)]
+struct TaskMarker(AnyElement);
+
+impl RenderOnce for TaskMarker {
+    fn render(self, window: &mut Window, _: &mut App) -> impl IntoElement {
+        div()
+            .h(window.line_height())
+            .flex()
+            .items_center()
+            .child(self.0)
     }
 }

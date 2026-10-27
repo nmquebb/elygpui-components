@@ -4,6 +4,8 @@ What changes for an app built on Ely, newest first. An entry names the crates it
 
 ## Unreleased
 
+- `ely-documents`: task checkboxes align with their first text line in visual, preview and split Markdown, including wrapped and nested tasks.
+
 - `ely-documents`: visual Markdown tasks toggle through document undo, and rendered code blocks have a top-right Copy with in-place feedback; blank space below the document continues writing.
 
 The first release on crates.io.
