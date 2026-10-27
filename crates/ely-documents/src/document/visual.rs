@@ -14,7 +14,9 @@ use crate::{
     theme::{ActiveTheme, Radius, TextSize, Theme},
     {
         MarkdownMode, TargetBlock,
-        render::{HEAVY, Hooks, OpenCell, Pointed, draw_nodes, heading_step, point_lines},
+        render::{
+            HEAVY, Hooks, OpenCell, Pointed, code_background, draw_nodes, heading_step, point_lines,
+        },
     },
 };
 
@@ -46,7 +48,11 @@ pub(super) fn open_text(kind: Option<(TargetBlock, bool)>, scale: f32, theme: &T
         Some((kind @ (TargetBlock::Code | TargetBlock::Math | TargetBlock::FrontMatter), true)) => {
             text.p_3()
                 .rounded(theme.radius(Radius::Md))
-                .bg(colors.sunken)
+                .bg(if kind == TargetBlock::Code {
+                    code_background(theme)
+                } else {
+                    colors.sunken
+                })
                 .when(kind != TargetBlock::Math, |text| {
                     text.font_family(theme.mono_family.clone()).text_size(mono)
                 })

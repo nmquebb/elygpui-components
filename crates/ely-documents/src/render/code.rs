@@ -1,8 +1,9 @@
 //! Fenced code keeps its highlighting and source hit-testing beside a snippet Copy.
 
 use gpui::{
-    AnyElement, App, InteractiveElement as _, IntoElement as _, MouseButton, ParentElement as _,
-    StatefulInteractiveElement as _, Styled as _, StyledText, div, prelude::FluentBuilder as _,
+    AnyElement, App, Hsla, InteractiveElement as _, IntoElement as _, MouseButton,
+    ParentElement as _, StatefulInteractiveElement as _, Styled as _, StyledText, div,
+    prelude::FluentBuilder as _,
 };
 
 use super::Draw;
@@ -10,7 +11,7 @@ use crate::{
     buttons::CopyButton,
     diagram::Diagram,
     editor::{code_colors, code_colors_with},
-    theme::{ActiveTheme as _, Radius, TextSize},
+    theme::{ActiveTheme as _, Radius, TextSize, Theme},
 };
 
 impl Draw<'_> {
@@ -62,7 +63,7 @@ impl Draw<'_> {
             .gap_1()
             .p_3()
             .rounded(theme.radius(Radius::Md))
-            .bg(colors.sunken)
+            .bg(code_background(theme))
             .when(language.is_some() || self.hooks.copy_code, |block| {
                 block.child(header)
             });
@@ -88,5 +89,14 @@ impl Draw<'_> {
             )
             .into_any_element();
         self.point_code(block, Some(layout), text, from)
+    }
+}
+
+/// A faint wash distinguishes dark snippets from their document surface.
+pub(crate) fn code_background(theme: &Theme) -> Hsla {
+    if theme.is_dark() {
+        theme.colors.fg.opacity(0.04)
+    } else {
+        theme.colors.sunken
     }
 }

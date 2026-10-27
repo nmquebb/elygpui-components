@@ -21,6 +21,7 @@ use crate::{
 
 mod blocks;
 mod code;
+pub(crate) use code::code_background;
 mod math_text;
 mod point;
 mod style;
