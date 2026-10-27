@@ -11,6 +11,7 @@ mod parse;
 mod place;
 mod point;
 mod tables;
+mod tasks;
 #[cfg(all(test, feature = "test-support"))]
 mod tests;
 mod visual;

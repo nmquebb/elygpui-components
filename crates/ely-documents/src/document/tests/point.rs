@@ -202,10 +202,16 @@ pub(super) fn press_at(x: Pixels, y: Pixels, button: MouseButton, cx: &mut Visua
 
 /// Presses block 0's code glyph `k` on `line`.
 pub(super) fn press_lines(k: usize, line: usize, button: MouseButton, cx: &mut VisualTestContext) {
-    let bounds = cx.debug_bounds("markdown-block-0").expect("drawn");
     let (body, small) = sizes(cx);
-    let x = bounds.left() + px(25.0) + small * 0.6 * (k as f32 + 0.25);
-    let y = bounds.top() + px(17.0) + body * 1.6 * (line as f32 + 0.25);
+    let origin = match cx.debug_bounds("markdown-code-text") {
+        Some(text) => text.origin,
+        None => {
+            let bounds = cx.debug_bounds("markdown-block-0").expect("drawn");
+            point(bounds.left() + px(25.0), bounds.top() + px(17.0))
+        }
+    };
+    let x = origin.x + small * 0.6 * (k as f32 + 0.25);
+    let y = origin.y + body * 1.6 * (line as f32 + 0.25);
     press_at(x, y, button, cx);
 }
 

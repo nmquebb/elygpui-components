@@ -14,6 +14,7 @@ use super::TargetBlock;
 pub(crate) struct Block {
     pub range: Range<usize>,
     pub kind: TargetBlock,
+    pub tasks: Vec<usize>,
     /// None shows a link definition as written.
     pub nodes: Option<Vec<Node>>,
 }
@@ -45,7 +46,10 @@ pub(crate) fn parsed(text: &str) -> Parsed {
                 out.iter_mut().for_each(|drawn| drawn.rebase(range.start));
                 out
             });
+            let mut tasks = Vec::new();
+            task_marks(text, node, &mut tasks);
             Block {
+                tasks,
                 range: range.start..range.start + kept,
                 kind: TargetBlock::of(node, text),
                 nodes,
@@ -56,6 +60,25 @@ pub(crate) fn parsed(text: &str) -> Parsed {
         text: text.to_string(),
         blocks,
         headings: reader.headings,
+    }
+}
+
+/// Checkbox marks in drawing order, identified by parsed task items.
+fn task_marks(text: &str, node: &mdast::Node, out: &mut Vec<usize>) {
+    if let mdast::Node::ListItem(item) = node
+        && item.checked.is_some()
+    {
+        let raw = &text[item.position.clone()];
+        if let Some(at) = raw.find('[')
+            && raw.as_bytes().get(at + 2) == Some(&b']')
+        {
+            out.push(item.position.start + at + 1);
+        }
+    }
+    if let Some(children) = node.children() {
+        for child in children {
+            task_marks(text, child, out);
+        }
     }
 }
 

@@ -9,19 +9,18 @@ use gpui::{
 use super::{
     Latex,
     contents::anchor,
-    diagram::Diagram,
     failed,
     picture::{Picture, Pictures},
     tree::{Inline, Node, Style, parse},
 };
 use crate::{
-    editor::{code_colors, code_colors_with},
     navigation::{Anchor, Sections},
     primitives::FocusRing as _,
-    theme::{ActiveTheme, Radius, TextSize},
+    theme::{ActiveTheme, TextSize},
 };
 
 mod blocks;
+mod code;
 mod math_text;
 mod point;
 mod style;
@@ -32,6 +31,8 @@ use style::highlight;
 pub(crate) use table::{CellAt, OpenCell};
 
 pub(crate) type OnLink = Rc<dyn Fn(&str, &mut Window, &mut App)>;
+/// Toggles the task at its ordinal within the drawn block.
+pub(crate) type OnTask = Rc<dyn Fn(usize, &mut Window, &mut App)>;
 /// Reveals the heading whose source starts at a byte.
 pub(crate) type OnHeading = Rc<dyn Fn(usize, &mut Window, &mut App)>;
 type DrawCode = Rc<dyn Fn(ElementId, Option<SharedString>, SharedString) -> AnyElement>;
@@ -125,6 +126,8 @@ pub(crate) struct Hooks<'a> {
     pub base: &'a Option<Arc<Path>>,
     pub pictures: &'a Option<Rc<Pictures>>,
     pub on_link: &'a Option<OnLink>,
+    pub on_task: &'a Option<OnTask>,
+    pub copy_code: bool,
     pub on_heading: &'a Option<OnHeading>,
     pub on_point: &'a Option<OnPoint>,
     /// The cell typed in, drawn in its place.
@@ -199,6 +202,7 @@ struct Draw<'a> {
     table: std::cell::Cell<bool>,
     /// Tables drawn so far.
     tables: std::cell::Cell<usize>,
+    tasks: std::cell::Cell<usize>,
 }
 
 impl Draw<'_> {
@@ -284,46 +288,7 @@ impl Draw<'_> {
                 language,
                 text,
                 from,
-            } => {
-                if language.as_deref() == Some("mermaid") {
-                    let diagram = Diagram::new(self.key("diagram"), text.clone());
-                    return self.point_code(diagram.into_any_element(), None, text, *from);
-                }
-                if let Some(draw) = self.code {
-                    return draw(
-                        self.key("code"),
-                        language.clone().map(Into::into),
-                        text.clone().into(),
-                    );
-                }
-                // A named fence reads as its language; prose stays plain.
-                let styles = match language.as_deref() {
-                    Some(name) => crate::forms::syntax_fenced(name)
-                        .map_or_else(Vec::new, |syntax| code_colors_with(text, syntax, cx)),
-                    None => code_colors(text, cx),
-                };
-                let code = StyledText::new(text.clone()).with_highlights(styles);
-                let layout = code.layout().clone();
-                let block = div()
-                    .flex()
-                    .flex_col()
-                    .gap_1()
-                    .p_3()
-                    .rounded(theme.radius(Radius::Md))
-                    .bg(colors.sunken)
-                    .font_family(theme.mono_family.clone())
-                    .text_size(theme.text_size(TextSize::Sm) * self.scale)
-                    .text_color(colors.syntax.variable)
-                    .children(language.clone().map(|name| {
-                        div()
-                            .text_size(theme.text_size(TextSize::Xs) * self.scale)
-                            .text_color(colors.fg_subtle)
-                            .child(name)
-                    }))
-                    .child(code)
-                    .into_any_element();
-                self.point_code(block, Some(layout), text, *from)
-            }
+            } => self.code_block(language, text, *from, cx),
             Node::List { start, items } => self.list(start, items, cx),
             Node::Table { aligns, head, rows } => self.table(aligns, head, rows, cx),
             Node::Rule => div()
@@ -422,6 +387,7 @@ pub(crate) fn draw_nodes(
         lists: std::cell::Cell::new(0),
         table: std::cell::Cell::new(false),
         tables: std::cell::Cell::new(0),
+        tasks: std::cell::Cell::new(0),
     };
     draw.nodes(nodes, cx)
 }
@@ -444,6 +410,8 @@ impl RenderOnce for MarkdownRenderer {
                 pictures: &self.pictures,
                 on_link: &self.on_link,
                 on_heading: &None,
+                on_task: &None,
+                copy_code: false,
                 on_point: &None,
                 cell: None,
             },
@@ -456,6 +424,7 @@ impl RenderOnce for MarkdownRenderer {
             lists: std::cell::Cell::new(0),
             table: std::cell::Cell::new(false),
             tables: std::cell::Cell::new(0),
+            tasks: std::cell::Cell::new(0),
         };
         div()
             .flex()

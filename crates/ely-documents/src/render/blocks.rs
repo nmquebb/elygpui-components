@@ -5,6 +5,8 @@ use gpui::{
 
 use super::{Draw, point::point_lines};
 use crate::{
+    forms::Checkbox,
+    i18n,
     primitives::{FocusRing as _, Icon, IconName},
     theme::{ActiveTheme, IconSize, Radius, TextSize},
     tree::{AlertKind, DocumentHeading, Node},
@@ -32,18 +34,7 @@ impl Draw<'_> {
             .gap_1()
             .children(items.iter().enumerate().map(|(ix, (task, body))| {
                 let marker: AnyElement = match (task, start) {
-                    (Some(done), _) => Icon::new(if *done {
-                        IconName::SquareCheck
-                    } else {
-                        IconName::Square
-                    })
-                    .size(IconSize::Sm)
-                    .color(if *done {
-                        colors.focus
-                    } else {
-                        colors.fg_subtle
-                    })
-                    .into_any_element(),
+                    (Some(done), _) => self.task_marker(*done, body, cx),
                     (None, Some(first)) => div()
                         .text_color(colors.fg_muted)
                         .child(format!("{}.", first + ix as u64))
@@ -81,6 +72,45 @@ impl Draw<'_> {
             .into_any_element();
         self.lists.set(depth);
         list
+    }
+
+    fn task_marker(&self, done: bool, body: &[Node], cx: &App) -> AnyElement {
+        let colors = &cx.theme().colors;
+        let task = self.tasks.get();
+        self.tasks.set(task + 1);
+        match self.hooks.on_task {
+            Some(on_task) => {
+                let on_task = on_task.clone();
+                let name = body
+                    .iter()
+                    .find_map(|node| match node {
+                        Node::Paragraph(inline) if !inline.text.is_empty() => {
+                            Some(inline.text.clone())
+                        }
+                        _ => None,
+                    })
+                    .unwrap_or_else(|| i18n::text(cx, "block.todo", &[]).to_string());
+                div()
+                    .id(self.key("task-slot"))
+                    .debug_selector(move || format!("markdown-task-{task}"))
+                    .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+                    .on_click(|_, _, cx| cx.stop_propagation())
+                    .child(
+                        Checkbox::new(self.key("task"), done)
+                            .name(name)
+                            .on_change(move |_, window, cx| on_task(task, window, cx)),
+                    )
+                    .into_any_element()
+            }
+            None => Icon::new(if done {
+                IconName::SquareCheck
+            } else {
+                IconName::Square
+            })
+            .size(IconSize::Sm)
+            .color(if done { colors.focus } else { colors.fg_subtle })
+            .into_any_element(),
+        }
     }
 
     /// A GitHub alert: a colored rule, icon, title and body.

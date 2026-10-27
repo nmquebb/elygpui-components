@@ -102,6 +102,7 @@ impl MarkdownDocument {
         let editing = self.mode == MarkdownMode::Visual;
         let drawn = editing && ix < self.parsed.blocks.len();
         let on_point = drawn.then(|| self.on_point(ix, cx));
+        let on_task = drawn.then(|| self.on_task(ix, cx));
         let theme = cx.theme();
         let colors = theme.colors.clone();
         let (radius, body, mono) = (
@@ -156,6 +157,8 @@ impl MarkdownDocument {
                         pictures: &None,
                         on_link: &self.on_link,
                         on_heading: &self.on_heading,
+                        on_task: &on_task,
+                        copy_code: true,
                         on_point: &on_point,
                         cell: cell.as_ref(),
                     },
@@ -208,6 +211,7 @@ impl MarkdownDocument {
         let text = open_text(kind, self.look.scale, cx.theme());
         div()
             .debug_selector(|| "markdown-open".to_string())
+            .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
             .on_mouse_down(MouseButton::Right, point)
             .px_3()
             .py_1()
@@ -363,6 +367,16 @@ impl Render for MarkdownDocument {
                 .aria_label(i18n::text(cx, "documents.document", &[]))
                 .key_context(CONTEXT)
                 .track_focus(&self.focus)
+                .on_mouse_down(
+                    MouseButton::Left,
+                    cx.listener(|document, event: &MouseDownEvent, window, cx| {
+                        if !event.modifiers.secondary() {
+                            window.prevent_default();
+                            cx.stop_propagation();
+                            document.open(None, super::edit::Landing::End, window, cx);
+                        }
+                    }),
+                )
                 .on_action(cx.listener(|document, _: &Undo, window, cx| {
                     document.history(false, window, cx);
                 }))

@@ -391,6 +391,7 @@ mod presses;
 mod reading;
 mod scroll;
 mod secondary;
+mod tasks;
 mod toc;
 mod tools;
 
