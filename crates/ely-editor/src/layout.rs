@@ -272,6 +272,22 @@ mod tests {
     }
 
     #[test]
+    fn disjoint_styles_preserve_gaps_and_adjacent_run_boundaries() {
+        let bold = HighlightStyle {
+            font_weight: Some(gpui::FontWeight::BOLD),
+            ..HighlightStyle::default()
+        };
+        let italic = HighlightStyle {
+            font_style: Some(gpui::FontStyle::Italic),
+            ..HighlightStyle::default()
+        };
+        assert_eq!(
+            stack(vec![(1..3, bold), (3..5, italic), (8..10, bold)]),
+            [(1..3, bold), (3..5, italic), (8..10, bold)]
+        );
+    }
+
+    #[test]
     fn unsorted_overlaps_keep_input_precedence_and_half_open_edges() {
         let bold = HighlightStyle {
             font_weight: Some(gpui::FontWeight::BOLD),
