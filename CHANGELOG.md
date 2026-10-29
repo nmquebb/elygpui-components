@@ -4,6 +4,8 @@ What changes for an app built on Ely, newest first. An entry names the crates it
 
 ## Unreleased
 
+- `ely-editor`, `ely-documents`: large highlighted text normalizes only active style spans at each boundary, preserving overlap order while avoiding quadratic scans across unrelated spans.
+
 - `ely-chat`: `MessageList::list_state` accepts externally spliced rows, allowing block-level virtualization while preserving message arrival counts and follow-newest controls.
 
 - `ely-documents`: dark Markdown code blocks use a faint lighter panel, including while editing; light panels retain their theme fill.

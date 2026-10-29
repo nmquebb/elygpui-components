@@ -90,25 +90,47 @@ pub(crate) fn around(folds: &[(usize, usize)], line: usize, limit: usize) -> Vec
 /// Styles laid over one another in order, later ones on top, as runs that do not overlap.
 #[doc(hidden)]
 pub fn stack(spans: Vec<(Range<usize>, HighlightStyle)>) -> Vec<(Range<usize>, HighlightStyle)> {
-    let mut edges: Vec<usize> = spans
+    // Syntax and Markdown often supply disjoint styles already in byte order.
+    if spans.iter().all(|(range, _)| !range.is_empty())
+        && spans
+            .windows(2)
+            .all(|pair| pair[0].0.end <= pair[1].0.start)
+    {
+        return spans;
+    }
+
+    let mut edges: Vec<_> = spans
         .iter()
-        .flat_map(|(range, _)| [range.start, range.end])
+        .enumerate()
+        .flat_map(|(index, (range, _))| [(range.start, index), (range.end, index)])
         .collect();
     edges.sort_unstable();
-    edges.dedup();
-    edges
-        .windows(2)
-        .filter_map(|pair| {
-            let (start, end) = (pair[0], pair[1]);
-            spans
-                .iter()
-                .filter(|(range, _)| range.start <= start && end <= range.end)
-                .fold(None, |below: Option<HighlightStyle>, (_, style)| {
-                    Some(below.map_or(*style, |below| below.highlight(*style)))
-                })
-                .map(|style| (start..end, style))
-        })
-        .collect()
+    let mut edges = edges.into_iter().peekable();
+    let mut active = BTreeSet::new();
+    let mut out = Vec::new();
+    while let Some(&(start, _)) = edges.peek() {
+        while let Some((_, index)) = edges.next_if(|(at, _)| *at == start) {
+            if spans[index].0.contains(&start) {
+                active.insert(index);
+            } else {
+                active.remove(&index);
+            }
+        }
+        let Some(&(end, _)) = edges.peek() else {
+            break;
+        };
+        // Blend in input order: color and fade composition are not associative.
+        let style = active
+            .iter()
+            .fold(None, |below: Option<HighlightStyle>, index| {
+                let style = spans[*index].1;
+                Some(below.map_or(style, |below| below.highlight(style)))
+            });
+        if let Some(style) = style {
+            out.push((start..end, style));
+        }
+    }
+    out
 }
 
 /// A line as drawn: its text with notes set in, their styles, and where each note went.
@@ -247,6 +269,116 @@ mod tests {
             Some(blue),
             "the later span wins where both lie"
         );
+    }
+
+    #[test]
+    fn disjoint_styles_preserve_gaps_and_adjacent_run_boundaries() {
+        let bold = HighlightStyle {
+            font_weight: Some(gpui::FontWeight::BOLD),
+            ..HighlightStyle::default()
+        };
+        let italic = HighlightStyle {
+            font_style: Some(gpui::FontStyle::Italic),
+            ..HighlightStyle::default()
+        };
+        assert_eq!(
+            stack(vec![(1..3, bold), (3..5, italic), (8..10, bold)]),
+            [(1..3, bold), (3..5, italic), (8..10, bold)]
+        );
+    }
+
+    #[test]
+    fn unsorted_overlaps_keep_input_precedence_and_half_open_edges() {
+        let bold = HighlightStyle {
+            font_weight: Some(gpui::FontWeight::BOLD),
+            ..HighlightStyle::default()
+        };
+        let italic = HighlightStyle {
+            font_style: Some(gpui::FontStyle::Italic),
+            ..HighlightStyle::default()
+        };
+        let normal = HighlightStyle {
+            font_weight: Some(gpui::FontWeight::NORMAL),
+            ..HighlightStyle::default()
+        };
+        assert_eq!(
+            stack(vec![(4..8, bold), (0..6, italic), (2..5, normal)]),
+            [
+                (0..2, italic),
+                (
+                    2..4,
+                    HighlightStyle {
+                        font_weight: normal.font_weight,
+                        ..italic
+                    }
+                ),
+                (
+                    4..5,
+                    HighlightStyle {
+                        font_weight: normal.font_weight,
+                        ..italic
+                    }
+                ),
+                (
+                    5..6,
+                    HighlightStyle {
+                        font_weight: bold.font_weight,
+                        ..italic
+                    }
+                ),
+                (6..8, bold),
+            ]
+        );
+    }
+
+    #[test]
+    #[expect(
+        clippy::reversed_empty_ranges,
+        reason = "Malformed span endpoints are data: keep their boundaries without applying their style."
+    )]
+    fn empty_and_reversed_spans_only_split_other_runs_at_their_edges() {
+        let bold = HighlightStyle {
+            font_weight: Some(gpui::FontWeight::BOLD),
+            ..HighlightStyle::default()
+        };
+        let italic = HighlightStyle {
+            font_style: Some(gpui::FontStyle::Italic),
+            ..HighlightStyle::default()
+        };
+        assert_eq!(
+            stack(vec![(0..6, bold), (3..3, italic), (5..1, italic)]),
+            [(0..1, bold), (1..3, bold), (3..5, bold), (5..6, bold),]
+        );
+        assert!(stack(vec![(2..2, bold), (4..1, italic)]).is_empty());
+        assert!(stack(Vec::new()).is_empty());
+    }
+
+    #[test]
+    fn translucent_colors_and_fades_are_composed_in_original_order() {
+        let first = HighlightStyle {
+            color: Some(gpui::hsla(0.1, 1., 0.5, 0.4)),
+            fade_out: Some(0.2),
+            ..HighlightStyle::default()
+        };
+        let second = HighlightStyle {
+            color: Some(gpui::hsla(0.6, 1., 0.5, 0.7)),
+            fade_out: Some(0.3),
+            ..HighlightStyle::default()
+        };
+        let third = HighlightStyle {
+            color: Some(gpui::hsla(0.9, 1., 0.5, 0.2)),
+            fade_out: Some(0.4),
+            ..HighlightStyle::default()
+        };
+        let runs = stack(vec![(2..6, first), (0..8, second), (1..7, third)]);
+        assert_eq!(
+            runs.iter()
+                .map(|(range, _)| range.clone())
+                .collect::<Vec<_>>(),
+            [0..1, 1..2, 2..6, 6..7, 7..8]
+        );
+        assert_eq!(runs[2].1, first.highlight(second).highlight(third));
+        assert_ne!(runs[2].1, second.highlight(first).highlight(third));
     }
 
     #[test]
