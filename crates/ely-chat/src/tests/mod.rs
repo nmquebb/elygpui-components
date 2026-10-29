@@ -10,6 +10,7 @@ use gpui::{
 mod cite;
 mod compose;
 mod history;
+mod rows;
 mod welcome;
 
 use super::{

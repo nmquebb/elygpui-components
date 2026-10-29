@@ -4,6 +4,8 @@ What changes for an app built on Ely, newest first. An entry names the crates it
 
 ## Unreleased
 
+- `ely-chat`: `MessageList::list_state` accepts externally spliced rows, allowing block-level virtualization while preserving message arrival counts and follow-newest controls.
+
 - `ely-documents`: dark Markdown code blocks use a faint lighter panel, including while editing; light panels retain their theme fill.
 
 - `ely-documents`: task checkboxes align with their first text line in visual, preview and split Markdown, including wrapped and nested tasks.

@@ -44,6 +44,7 @@ pub struct MessageList {
     id: ElementId,
     count: usize,
     render: RenderItem,
+    state: Option<ListState>,
 }
 
 impl MessageList {
@@ -57,19 +58,32 @@ impl MessageList {
             id: id.into(),
             count,
             render: Rc::new(render),
+            state: None,
         }
+    }
+
+    /// Use externally spliced rows while `count` continues to count message arrivals.
+    /// Supply it from the first render, keep it for this id's lifetime, and notify after splicing.
+    /// This component installs its scroll handler on the supplied state.
+    /// The render callback receives a row index, rather than a message index.
+    pub fn list_state(mut self, state: ListState) -> Self {
+        self.state = Some(state);
+        self
     }
 }
 
 impl RenderOnce for MessageList {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let count = self.count;
+        let external = self.state.is_some();
         let overdraw = cx.theme().list_overdraw().to_pixels(window.rem_size());
         let feed = window.use_keyed_state(
             (self.id.clone(), "feed"),
             cx,
             move |_, cx: &mut Context<Feed>| {
-                let list = ListState::new(count, ListAlignment::Bottom, overdraw);
+                let list = self
+                    .state
+                    .unwrap_or_else(|| ListState::new(count, ListAlignment::Bottom, overdraw));
                 let owner = cx.entity().downgrade();
                 list.set_scroll_handler(move |event, _, cx| {
                     let away = event.is_scrolled;
@@ -94,10 +108,12 @@ impl RenderOnce for MessageList {
         );
         if feed.read(cx).count != count {
             feed.update(cx, |feed, _| {
-                if count >= feed.count {
-                    feed.list.splice(feed.count..feed.count, count - feed.count);
-                } else {
-                    feed.list.splice(count..feed.count, 0);
+                if !external {
+                    if count >= feed.count {
+                        feed.list.splice(feed.count..feed.count, count - feed.count);
+                    } else {
+                        feed.list.splice(count..feed.count, 0);
+                    }
                 }
                 feed.fresh = arrived(feed.count, count, feed.away, feed.fresh);
                 feed.count = count;
