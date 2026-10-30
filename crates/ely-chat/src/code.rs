@@ -15,6 +15,11 @@ use crate::{
     theme::{ActiveTheme, ControlSize, Radius, Syntax, TextSize},
 };
 
+mod preview;
+
+#[cfg(test)]
+mod preview_tests;
+
 /// Lines a block shows before it folds.
 const FOLD_AFTER: usize = 14;
 
@@ -41,6 +46,7 @@ pub struct CodeBlock {
     on_download: Option<Run>,
     on_run: Option<Run>,
     on_apply: Option<Run>,
+    on_expand: Option<Run>,
 }
 
 impl CodeBlock {
@@ -53,12 +59,20 @@ impl CodeBlock {
             on_download: None,
             on_run: None,
             on_apply: None,
+            on_expand: None,
         }
     }
 
     /// The language named in its header, such as `rust`; `code` unless set.
     pub fn language(mut self, language: impl Into<SharedString>) -> Self {
         self.language = Some(language.into());
+        self
+    }
+
+    /// Shows at most 14 lines and 4 KiB as plain text; the button opens the owner's full-code tab.
+    /// Copy keeps the complete original source, including trailing newlines.
+    pub fn preview(mut self, on_expand: impl Fn(&mut Window, &mut App) + 'static) -> Self {
+        self.on_expand = Some(Rc::new(on_expand));
         self
     }
 
@@ -85,16 +99,41 @@ impl RenderOnce for CodeBlock {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let open = window.use_keyed_state((self.id.clone(), "open"), cx, |_, _| false);
         let opened = *open.read(cx);
-        let code = self.code.trim_end_matches('\n').to_string();
-        let fold = fold_at(&code, FOLD_AFTER).filter(|_| !opened);
-        let hidden = fold.map(|at| code[at..].lines().count() - 1);
-        let shown = fold.map_or(code.as_str(), |at| &code[..at]).to_string();
-        let shown: SharedString = shown.into();
-        let highlighted = window.use_keyed_state((self.id.clone(), "highlights"), cx, |_, cx| {
-            CodeColors::new(shown.clone(), cx)
-        });
-        highlighted.update(cx, |colors, cx| colors.refresh(shown.clone(), cx));
-        let styles = highlighted.read(cx).styles.clone();
+        let preview = self.on_expand.is_some();
+        let code = if preview {
+            self.code.as_ref()
+        } else {
+            self.code.trim_end_matches('\n')
+        };
+        let fold = if preview {
+            let end = preview::end(code);
+            (end < code.len()).then_some(end)
+        } else {
+            fold_at(code, FOLD_AFTER).filter(|_| !opened)
+        };
+        let hidden = fold
+            .filter(|_| !preview)
+            .map(|at| code[at..].lines().count() - 1);
+        let shown: SharedString = fold
+            .map_or(code, |at| &code[..at])
+            .trim_end_matches('\n')
+            .to_owned()
+            .into();
+        let styles: Rc<[(Range<usize>, HighlightStyle)]> = if preview {
+            Rc::from([])
+        } else {
+            let highlighted =
+                window.use_keyed_state((self.id.clone(), "highlights"), cx, |_, cx| {
+                    CodeColors::new(shown.clone(), cx)
+                });
+            highlighted.update(cx, |colors, cx| colors.refresh(shown.clone(), cx));
+            highlighted.read(cx).styles.clone()
+        };
+        let copied = if preview {
+            self.code.clone()
+        } else {
+            code.to_owned().into()
+        };
         let theme = cx.theme();
         let colors = theme.colors.clone();
         let action = |key: &str, icon: IconName, tip: &'static str, run: Option<Run>| {
@@ -106,7 +145,7 @@ impl RenderOnce for CodeBlock {
                     .on_click(move |_, window, cx| run(window, cx))
             })
         };
-        let lines = code.lines().count();
+        let lines = if preview { 0 } else { code.lines().count() };
         let toggle = open.clone();
         div()
             .flex()
@@ -140,11 +179,12 @@ impl RenderOnce for CodeBlock {
                         "Download",
                         self.on_download,
                     ))
-                    .child(CopyButton::new((self.id.clone(), "copy"), code.clone())),
+                    .child(CopyButton::new((self.id.clone(), "copy"), copied)),
             )
             .child(
                 on_axis(div().id((self.id.clone(), "code")))
                     .overflow_x_scroll()
+                    .relative()
                     .px_3()
                     .py_2()
                     .font_family(theme.mono_family.clone())
@@ -152,8 +192,14 @@ impl RenderOnce for CodeBlock {
                     .line_height(relative(1.55))
                     .text_color(colors.syntax.variable)
                     .whitespace_nowrap()
-                    .child(StyledText::new(shown).with_highlights(styles.iter().cloned())),
+                    .child(StyledText::new(shown).with_highlights(styles.iter().cloned()))
+                    .when(preview && fold.is_some(), |body| {
+                        body.child(preview::fade(colors.sunken))
+                    }),
             )
+            .when_some(self.on_expand, |block, open| {
+                block.child(preview::expand(self.id.clone(), open, cx))
+            })
             .when(lines > FOLD_AFTER, |block| {
                 block.child(
                     div()

@@ -4,6 +4,8 @@ What changes for an app built on Ely, newest first. An entry names the crates it
 
 ## Unreleased
 
+- `ely-chat`: `CodeBlock::preview` shows bounded plain text with a fade and Open in tab action; Copy retains the complete original source.
+
 - `ely-chat`: code blocks cache syntax colors until their shown text or palette changes and omit redundant opaque highlights, reducing text layout work for large code and tool output while preserving translucent palettes.
 
 - `ely-documents`: `MarkdownListContext::wrap` and `MarkdownRenderer::list_depth` let virtual fragments retain list marker sizing, task decoration and nested bullet styles; `MarkdownRenderer::quote` shares the quote frame with virtual fragments.

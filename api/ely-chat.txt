@@ -281,6 +281,7 @@ pub fn ely_chat::CodeBlock::new(impl core::convert::Into<gpui::window::ElementId
 pub fn ely_chat::CodeBlock::on_apply(self, impl core::ops::function::Fn(&mut gpui::window::Window, &mut gpui::app::App) + 'static) -> Self
 pub fn ely_chat::CodeBlock::on_download(self, impl core::ops::function::Fn(&mut gpui::window::Window, &mut gpui::app::App) + 'static) -> Self
 pub fn ely_chat::CodeBlock::on_run(self, impl core::ops::function::Fn(&mut gpui::window::Window, &mut gpui::app::App) + 'static) -> Self
+pub fn ely_chat::CodeBlock::preview(self, impl core::ops::function::Fn(&mut gpui::window::Window, &mut gpui::app::App) + 'static) -> Self
 pub fn ely_chat::CodeBlock::render(self, &mut gpui::window::Window, &mut gpui::app::App) -> impl gpui::element::IntoElement
 pub fn ely_chat::ContextChips::into_any_element(self) -> gpui::element::AnyElement
 pub fn ely_chat::ContextChips::into_element(self) -> Self::Element
