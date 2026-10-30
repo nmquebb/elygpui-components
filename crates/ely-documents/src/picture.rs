@@ -1,3 +1,5 @@
+//! Picture addresses, retained resources and natural image sizing.
+
 use std::{
     collections::HashMap,
     hash::{DefaultHasher, Hash, Hasher},
@@ -64,7 +66,7 @@ pub type Pictures = HashMap<String, Result<HeldPicture, SharedString>>;
 pub(crate) enum Origin {
     File(PathBuf),
     /// Bytes inline in the address, and their type.
-    Data(ImageFormat, Arc<[u8]>),
+    Data(HeldPicture),
     Web,
     /// A relative path with no folder to read it in.
     Loose,
@@ -98,23 +100,24 @@ fn path(written: &str) -> Result<PathBuf, SharedString> {
 /// Where `url` points, read from the folder `base`.
 pub(crate) fn origin(url: &str, base: Option<&Path>) -> Origin {
     let url = url.trim();
-    let lower = url.to_ascii_lowercase();
-    if lower.starts_with("http://") || lower.starts_with("https://") || url.starts_with("//") {
+    let (scheme, rest) = url.split_once(':').unwrap_or(("", url));
+    if ((scheme.eq_ignore_ascii_case("http") || scheme.eq_ignore_ascii_case("https"))
+        && rest.starts_with("//"))
+        || url.starts_with("//")
+    {
         return Origin::Web;
     }
-    if lower.starts_with("data:") {
+    if scheme.eq_ignore_ascii_case("data") {
         return inline(url);
     }
-    if lower.starts_with("file:") {
-        return file(&url[5..]);
+    if scheme.eq_ignore_ascii_case("file") {
+        return file(rest);
     }
-    let scheme = url.split_once(':').is_some_and(|(scheme, _)| {
-        scheme.len() > 1
-            && scheme
-                .chars()
-                .all(|ch| ch.is_ascii_alphanumeric() || "+-.".contains(ch))
-    });
-    if scheme {
+    if scheme.len() > 1
+        && scheme
+            .chars()
+            .all(|ch| ch.is_ascii_alphanumeric() || "+-.".contains(ch))
+    {
         return Origin::Bad(format!("{url} is no picture address").into());
     }
     let written = url.split(['?', '#']).next().unwrap_or_default();
@@ -155,8 +158,36 @@ fn inline(url: &str) -> Origin {
         return Origin::Bad(format!("{mime} is no image type").into());
     };
     match base64::engine::general_purpose::STANDARD.decode(payload.trim()) {
-        Ok(bytes) => Origin::Data(format, bytes.into()),
+        Ok(bytes) => Origin::Data(HeldPicture::new(format, bytes)),
         Err(error) => Origin::Bad(format!("{error}").into()),
+    }
+}
+
+/// Reuse resolution and inline hashing until an element's URL or folder changes.
+#[derive(Default)]
+struct OriginCache(Option<Resolved>);
+
+struct Resolved {
+    url: String,
+    base: Option<PathBuf>,
+    origin: Origin,
+}
+
+impl OriginCache {
+    fn get(&mut self, url: &str, base: Option<&Path>) -> Origin {
+        if let Some(saved) = &self.0
+            && saved.url == url
+            && saved.base.as_deref() == base
+        {
+            return saved.origin.clone();
+        }
+        let origin = origin(url, base);
+        self.0 = Some(Resolved {
+            url: url.to_owned(),
+            base: base.map(Path::to_path_buf),
+            origin: origin.clone(),
+        });
+        origin
     }
 }
 
@@ -171,24 +202,9 @@ impl Asset for Holder {
         held: Self::Source,
         cx: &mut App,
     ) -> impl Future<Output = Self::Output> + Send + 'static {
-        Unpacker::load((held.format, held.bytes), cx)
-    }
-}
-
-/// Inline bytes decoded as gpui decodes files.
-enum Unpacker {}
-
-impl Asset for Unpacker {
-    type Source = (ImageFormat, Arc<[u8]>);
-    type Output = Result<Arc<RenderImage>, SharedString>;
-
-    fn load(
-        (format, bytes): Self::Source,
-        cx: &mut App,
-    ) -> impl Future<Output = Self::Output> + Send + 'static {
         let renderer = cx.svg_renderer();
         async move {
-            Image::from_bytes(format, bytes.to_vec())
+            Image::from_bytes(held.format, held.bytes.to_vec())
                 .to_image_data(renderer)
                 .map_err(|error| format!("{error:#}").into())
         }
@@ -223,14 +239,13 @@ fn picture(shown: Picture, window: &mut Window, cx: &mut App) -> AnyElement {
     let (alt, url) = (alt.as_str(), url.as_str());
     let colors = cx.theme().colors.clone();
     let origin = match held {
-        Some(Ok(held)) => {
-            let svg = held.format == ImageFormat::Svg;
-            let image = |loaded: &Result<Arc<RenderImage>, _>| loaded.as_ref().ok().cloned();
-            let loaded = hold::<Holder>(id, &held, image, window, cx);
-            return drawn(loaded, svg, alt, url, cx);
-        }
+        Some(Ok(held)) => Origin::Data(held),
         Some(Err(why)) => Origin::Bad(why),
-        None => origin(url, base.as_deref()),
+        None => {
+            let cache =
+                window.use_keyed_state((id.clone(), "origin"), cx, |_, _| OriginCache::default());
+            cache.update(cx, |cache, _| cache.get(url, base.as_deref()))
+        }
     };
     let (loaded, svg) = match origin {
         Origin::File(path) => {
@@ -243,13 +258,10 @@ fn picture(shown: Picture, window: &mut Window, cx: &mut App) -> AnyElement {
                 .map(|loaded| loaded.map_err(|error| SharedString::from(error.to_string())));
             (loaded, svg)
         }
-        Origin::Data(format, bytes) => {
-            let svg = format == ImageFormat::Svg;
+        Origin::Data(held) => {
+            let svg = held.format == ImageFormat::Svg;
             let image = |loaded: &Result<Arc<RenderImage>, _>| loaded.as_ref().ok().cloned();
-            (
-                hold::<Unpacker>(id, &(format, bytes), image, window, cx),
-                svg,
-            )
+            (hold::<Holder>(id, &held, image, window, cx), svg)
         }
         Origin::Web => {
             let said = i18n::text(cx, "markdown.picture.web", &[]);
@@ -290,8 +302,19 @@ fn drawn(
             log::warn!("markdown: a picture did not load");
             note(alt, why, colors.danger, cx)
         }
-        None => note(alt, url.to_string().into(), colors.fg_subtle, cx),
+        None => note(alt, pending_address(url), colors.fg_subtle, cx),
     }
+}
+
+fn pending_address(url: &str) -> SharedString {
+    if let Some((head, _)) = url.trim().split_once(',')
+        && head
+            .get(..5)
+            .is_some_and(|scheme| scheme.eq_ignore_ascii_case("data:"))
+    {
+        return format!("{head},…").into();
+    }
+    url.to_owned().into()
 }
 
 /// A picture not drawn: its alt text and why.
@@ -318,71 +341,4 @@ fn note(alt: &str, said: SharedString, tone: Hsla, cx: &App) -> AnyElement {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn addresses_resolve_against_the_folder() {
-        let base = Path::new("/notes");
-        assert_eq!(
-            origin("assets/a%20b.png?x#y", Some(base)),
-            Origin::File(base.join("assets/a b.png"))
-        );
-        assert_eq!(origin("assets/a.png", None), Origin::Loose);
-        assert_eq!(origin("https://e.x/a.png", Some(base)), Origin::Web);
-        assert_eq!(origin("//e.x/a.png", Some(base)), Origin::Web);
-        assert!(matches!(origin("mailto:a@b", Some(base)), Origin::Bad(_)));
-        let absolute = std::env::current_dir().expect("a dir").join("a.png");
-        assert_eq!(
-            origin(&absolute.display().to_string(), Some(base)),
-            Origin::File(absolute)
-        );
-    }
-
-    #[test]
-    fn file_addresses_decode_without_query_or_fragment() {
-        for url in [
-            "file:///tmp/a%23b.png",
-            "file://localhost/tmp/a%23b.png#x",
-            "FILE:/tmp/a%23b.png?y",
-        ] {
-            assert_eq!(
-                origin(url, None),
-                Origin::File(PathBuf::from("/tmp/a#b.png")),
-                "{url}"
-            );
-        }
-        if cfg!(windows) {
-            assert_eq!(
-                origin("file:///C:/notes/a.png#preview", None),
-                Origin::File(PathBuf::from("C:/notes/a.png"))
-            );
-        }
-    }
-
-    #[test]
-    fn a_file_on_another_host_is_its_share_or_refused() {
-        let found = origin("file://server/share/a.png", Some(Path::new("/notes")));
-        match cfg!(windows) {
-            true => assert_eq!(found, Origin::File(PathBuf::from("//server/share/a.png"))),
-            false => assert!(matches!(found, Origin::Bad(_)), "{found:?}"),
-        }
-    }
-
-    #[test]
-    fn data_addresses_carry_their_bytes() {
-        assert_eq!(
-            origin("data:image/png;base64,cG5n", None),
-            Origin::Data(ImageFormat::Png, Arc::from(&b"png"[..]))
-        );
-        assert!(matches!(origin("data:image/png,raw", None), Origin::Bad(_)));
-        assert!(matches!(
-            origin("data:text/plain;base64,eA==", None),
-            Origin::Bad(_)
-        ));
-        assert!(matches!(
-            origin("data:image/png;base64,***", None),
-            Origin::Bad(_)
-        ));
-    }
-}
+mod tests;
