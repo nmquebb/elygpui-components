@@ -322,6 +322,7 @@ pub fn ely_agent::ToolCallCard::render(self, &mut gpui::window::Window, &mut gpu
 pub fn ely_agent::ToolCallCard::result(self, impl core::convert::Into<gpui_shared_string::SharedString>) -> Self
 pub fn ely_agent::ToolCallCard::summary(self, impl core::convert::Into<gpui_shared_string::SharedString>) -> Self
 pub fn ely_agent::ToolCallCard::took(self, core::time::Duration) -> Self
+pub fn ely_agent::ToolCallGroup::expanded(self, bool, impl core::ops::function::Fn(bool, &mut gpui::window::Window, &mut gpui::app::App) + 'static) -> Self
 pub fn ely_agent::ToolCallGroup::extend(&mut self, impl core::iter::traits::collect::IntoIterator<Item = gpui::element::AnyElement>)
 pub fn ely_agent::ToolCallGroup::into_any_element(self) -> gpui::element::AnyElement
 pub fn ely_agent::ToolCallGroup::into_element(self) -> Self::Element

@@ -1,4 +1,4 @@
-use std::time::Duration;
+use std::{rc::Rc, time::Duration};
 
 use gpui::{
     AnyElement, App, Div, ElementId, Entity, FontWeight, InteractiveElement, IntoElement,
@@ -14,14 +14,31 @@ use crate::{
     typography::{Ellipsis, format::took, tabular},
 };
 
+type OnToggle = Rc<dyn Fn(bool, &mut Window, &mut App)>;
+
+struct Toggle {
+    open: bool,
+    handler: OnToggle,
+}
+
+impl Toggle {
+    fn local(state: Entity<bool>, cx: &App) -> Self {
+        Self {
+            open: *state.read(cx),
+            handler: Rc::new(move |_, _, cx| {
+                state.update(cx, |open, cx| {
+                    *open = !*open;
+                    log::info!("tool call: open {open}");
+                    cx.notify();
+                });
+            }),
+        }
+    }
+}
+
 /// A row that opens a body through `toggle`: a Tab stop while it has one.
-fn header(
-    id: ElementId,
-    name: SharedString,
-    toggle: Option<Entity<bool>>,
-    cx: &App,
-) -> Stateful<Div> {
-    let open = toggle.as_ref().map(|state| *state.read(cx));
+fn header(id: ElementId, name: SharedString, toggle: Option<Toggle>, cx: &App) -> Stateful<Div> {
+    let open = toggle.as_ref().map(|toggle| toggle.open);
     let theme = cx.theme();
     div()
         .id(id.clone())
@@ -38,17 +55,13 @@ fn header(
         .rounded(theme.radius(Radius::Md))
         .border_1()
         .border_color(transparent_black())
-        .when_some(toggle, |row, state| {
+        .when_some(toggle, |row, toggle| {
             row.tab_index(0)
                 .focus_ring(cx)
                 .cursor_pointer()
                 .on_mouse_down(MouseButton::Left, |_, window, _| window.prevent_default())
-                .on_click(move |_, _, cx| {
-                    state.update(cx, |open, cx| {
-                        *open = !*open;
-                        log::info!("tool call: open {open}");
-                        cx.notify();
-                    })
+                .on_click(move |_, window, cx| {
+                    (toggle.handler)(!toggle.open, window, cx);
                 })
         })
 }
@@ -141,7 +154,7 @@ impl RenderOnce for ToolCallCard {
                 header(
                     (self.id.clone(), "header").into(),
                     self.name.clone(),
-                    opens.then_some(state),
+                    opens.then(|| Toggle::local(state, cx)),
                     cx,
                 )
                 .child(mark)
@@ -225,6 +238,7 @@ pub struct ToolCallGroup {
     id: ElementId,
     label: SharedString,
     calls: SmallVec<[AnyElement; 4]>,
+    toggle: Option<Toggle>,
 }
 
 impl ToolCallGroup {
@@ -234,7 +248,21 @@ impl ToolCallGroup {
             id: id.into(),
             label: label.into(),
             calls: SmallVec::new(),
+            toggle: None,
         }
+    }
+
+    /// Control expansion; the header requests a new value and waits for the owner to adopt it.
+    pub fn expanded(
+        mut self,
+        open: bool,
+        on_toggle: impl Fn(bool, &mut Window, &mut App) + 'static,
+    ) -> Self {
+        self.toggle = Some(Toggle {
+            open,
+            handler: Rc::new(on_toggle),
+        });
+        self
     }
 }
 
@@ -246,8 +274,11 @@ impl ParentElement for ToolCallGroup {
 
 impl RenderOnce for ToolCallGroup {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
-        let state = window.use_keyed_state((self.id.clone(), "open"), cx, |_, _| false);
-        let open = *state.read(cx);
+        let toggle = self.toggle.unwrap_or_else(|| {
+            let state = window.use_keyed_state((self.id.clone(), "open"), cx, |_, _| false);
+            Toggle::local(state, cx)
+        });
+        let open = toggle.open;
         let theme = cx.theme();
         let colors = theme.colors.clone();
         div()
@@ -259,7 +290,7 @@ impl RenderOnce for ToolCallGroup {
                 header(
                     (self.id.clone(), "header").into(),
                     self.label.clone(),
-                    Some(state),
+                    Some(toggle),
                     cx,
                 )
                 .px_1()

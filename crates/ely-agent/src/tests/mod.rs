@@ -7,6 +7,7 @@ mod changes;
 mod control;
 mod environment;
 mod previews;
+mod tools;
 
 use super::{AgentProgress, Permission, PermissionPrompt, ToolApprovalDialog};
 use crate::{forms, primitives::FocusNext, theme::Theme};

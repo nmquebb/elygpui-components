@@ -4,6 +4,8 @@ What changes for an app built on Ely, newest first. An entry names the crates it
 
 ## Unreleased
 
+- `ely-agent`: `ToolCallGroup::expanded` lets a host own expansion while retaining the group's header, keyboard interaction and accessibility state.
+
 - `ely-editor`, `ely-documents`: large highlighted text normalizes only active style spans at each boundary, preserving overlap order while avoiding quadratic scans across unrelated spans.
 
 - `ely-chat`: `MessageList::list_state` accepts externally spliced rows, allowing block-level virtualization while preserving message arrival counts and follow-newest controls.
