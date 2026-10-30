@@ -1,3 +1,4 @@
+mod alert_context;
 mod list_context;
 
 use gpui::{Context, IntoElement, Render, TestAppContext, Window, div, prelude::*, px, rems};
