@@ -40,16 +40,24 @@ impl MarkdownListContext {
     pub fn wrap(self, content: impl IntoElement, size: TextSize) -> impl IntoElement {
         Contextual {
             context: self,
-            size,
+            size: Some(size),
             content: content.into_any_element(),
         }
+    }
+}
+
+pub(super) fn inherited(context: MarkdownListContext, content: AnyElement) -> impl IntoElement {
+    Contextual {
+        context,
+        size: None,
+        content,
     }
 }
 
 #[derive(IntoElement)]
 struct Contextual {
     context: MarkdownListContext,
-    size: TextSize,
+    size: Option<TextSize>,
     content: AnyElement,
 }
 
@@ -69,8 +77,10 @@ impl RenderOnce for Contextual {
             context.checked == Some(true),
             cx,
         )
-        .text_size(cx.theme().text_size(self.size))
-        .line_height(cx.theme().text_size(self.size) * 1.6)
+        .when_some(self.size, |row, size| {
+            row.text_size(cx.theme().text_size(size))
+                .line_height(cx.theme().text_size(size) * 1.6)
+        })
     }
 }
 

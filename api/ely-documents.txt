@@ -22,6 +22,7 @@ impl core::clone::Clone for ely_documents::InlineFormat
 impl core::clone::Clone for ely_documents::Margins
 impl core::clone::Clone for ely_documents::MarkdownAlertContext
 impl core::clone::Clone for ely_documents::MarkdownBlock
+impl core::clone::Clone for ely_documents::MarkdownContext
 impl core::clone::Clone for ely_documents::MarkdownListContext
 impl core::clone::Clone for ely_documents::MarkdownMode
 impl core::clone::Clone for ely_documents::MathError
@@ -66,6 +67,7 @@ impl core::cmp::Eq for ely_documents::HeldPicture
 impl core::cmp::Eq for ely_documents::InlineFormat
 impl core::cmp::Eq for ely_documents::Margins
 impl core::cmp::Eq for ely_documents::MarkdownAlertContext
+impl core::cmp::Eq for ely_documents::MarkdownContext
 impl core::cmp::Eq for ely_documents::MarkdownListContext
 impl core::cmp::Eq for ely_documents::MarkdownMode
 impl core::cmp::Eq for ely_documents::MathError
@@ -115,6 +117,7 @@ impl core::cmp::PartialEq for ely_documents::InlineFormat
 impl core::cmp::PartialEq for ely_documents::Margins
 impl core::cmp::PartialEq for ely_documents::MarkdownAlertContext
 impl core::cmp::PartialEq for ely_documents::MarkdownBlock
+impl core::cmp::PartialEq for ely_documents::MarkdownContext
 impl core::cmp::PartialEq for ely_documents::MarkdownListContext
 impl core::cmp::PartialEq for ely_documents::MarkdownMode
 impl core::cmp::PartialEq for ely_documents::MathError
@@ -177,6 +180,7 @@ impl core::fmt::Debug for ely_documents::InlineFormat
 impl core::fmt::Debug for ely_documents::Margins
 impl core::fmt::Debug for ely_documents::MarkdownAlertContext
 impl core::fmt::Debug for ely_documents::MarkdownBlock
+impl core::fmt::Debug for ely_documents::MarkdownContext
 impl core::fmt::Debug for ely_documents::MarkdownListContext
 impl core::fmt::Debug for ely_documents::MarkdownMode
 impl core::fmt::Debug for ely_documents::MathError
@@ -251,6 +255,7 @@ impl core::marker::StructuralPartialEq for ely_documents::InlineFormat
 impl core::marker::StructuralPartialEq for ely_documents::Margins
 impl core::marker::StructuralPartialEq for ely_documents::MarkdownAlertContext
 impl core::marker::StructuralPartialEq for ely_documents::MarkdownBlock
+impl core::marker::StructuralPartialEq for ely_documents::MarkdownContext
 impl core::marker::StructuralPartialEq for ely_documents::MarkdownListContext
 impl core::marker::StructuralPartialEq for ely_documents::MarkdownMode
 impl core::marker::StructuralPartialEq for ely_documents::MathError
@@ -546,6 +551,12 @@ pub ely_documents::MarkdownBlock::Table::aligns: alloc::vec::Vec<ely_documents::
 pub ely_documents::MarkdownBlock::Table::head: alloc::vec::Vec<alloc::vec::Vec<ely_documents::MarkdownBlock>>
 pub ely_documents::MarkdownBlock::Table::rows: alloc::vec::Vec<alloc::vec::Vec<alloc::vec::Vec<ely_documents::MarkdownBlock>>>
 pub ely_documents::MarkdownBlock::Toc(alloc::vec::Vec<ely_documents::DocumentHeading>)
+pub ely_documents::MarkdownContext::Alert(ely_documents::MarkdownAlertContext)
+pub ely_documents::MarkdownContext::Footnote
+pub ely_documents::MarkdownContext::Footnote::continuation: bool
+pub ely_documents::MarkdownContext::Footnote::label: gpui_shared_string::SharedString
+pub ely_documents::MarkdownContext::List(ely_documents::MarkdownListContext)
+pub ely_documents::MarkdownContext::Quote
 pub ely_documents::MarkdownListContext::checked: core::option::Option<bool>
 pub ely_documents::MarkdownListContext::continuation: bool
 pub ely_documents::MarkdownListContext::depth: usize
@@ -712,6 +723,7 @@ pub enum ely_documents::Format
 pub enum ely_documents::InlineFormat
 pub enum ely_documents::Margins
 pub enum ely_documents::MarkdownBlock
+pub enum ely_documents::MarkdownContext
 pub enum ely_documents::MarkdownMode
 pub enum ely_documents::Paper
 pub enum ely_documents::Style
@@ -880,6 +892,9 @@ pub fn ely_documents::MarkdownAlertContext::wrap(self, impl gpui::element::IntoE
 pub fn ely_documents::MarkdownBlock::clone(&self) -> Self
 pub fn ely_documents::MarkdownBlock::eq(&self, &Self) -> bool
 pub fn ely_documents::MarkdownBlock::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn ely_documents::MarkdownContext::clone(&self) -> Self
+pub fn ely_documents::MarkdownContext::eq(&self, &Self) -> bool
+pub fn ely_documents::MarkdownContext::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub fn ely_documents::MarkdownDocument::block(&mut self, ely_documents::BlockCommand, &mut gpui::app::context::Context<'_, Self>) -> core::result::Result<(), ely_documents::EditRefusal>
 pub fn ely_documents::MarkdownDocument::caret(&self, &gpui::app::App) -> (usize, usize)
 pub fn ely_documents::MarkdownDocument::delete_image(&mut self, usize, &mut gpui::app::context::Context<'_, Self>) -> core::result::Result<(), ely_documents::EditRefusal>
@@ -930,6 +945,7 @@ pub fn ely_documents::MarkdownReader<'a>::note(&self, &str) -> core::option::Opt
 pub fn ely_documents::MarkdownRenderer::base(self, impl core::convert::Into<alloc::rcs::arc::Arc<std::path::Path>>) -> Self
 pub fn ely_documents::MarkdownRenderer::blocks(impl core::convert::Into<gpui::window::ElementId>, alloc::rcs::rc::Rc<[ely_documents::MarkdownBlock]>) -> Self
 pub fn ely_documents::MarkdownRenderer::code(self, impl core::ops::function::Fn(gpui::window::ElementId, core::option::Option<gpui_shared_string::SharedString>, gpui_shared_string::SharedString) -> gpui::element::AnyElement + 'static) -> Self
+pub fn ely_documents::MarkdownRenderer::inherit_body_style(self, bool) -> Self
 pub fn ely_documents::MarkdownRenderer::into_any_element(self) -> gpui::element::AnyElement
 pub fn ely_documents::MarkdownRenderer::into_element(self) -> Self::Element
 pub fn ely_documents::MarkdownRenderer::list_depth(self, usize) -> Self
@@ -940,6 +956,7 @@ pub fn ely_documents::MarkdownRenderer::quote(impl gpui::element::IntoElement) -
 pub fn ely_documents::MarkdownRenderer::render(self, &mut gpui::window::Window, &mut gpui::app::App) -> impl gpui::element::IntoElement
 pub fn ely_documents::MarkdownRenderer::sections(self, &gpui::app::entity_map::Entity<ely_core::navigation::toc::Sections>) -> Self
 pub fn ely_documents::MarkdownRenderer::text_size(self, ely_core::theme::tokens::TextSize) -> Self
+pub fn ely_documents::MarkdownRenderer::wrap_fragment(impl gpui::element::IntoElement, impl core::iter::traits::collect::IntoIterator<Item = (ely_documents::MarkdownContext, gpui::geometry::Pixels)>, ely_core::theme::tokens::TextSize) -> impl gpui::element::IntoElement
 pub fn ely_documents::MathError::clone(&self) -> Self
 pub fn ely_documents::MathError::eq(&self, &Self) -> bool
 pub fn ely_documents::MathError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
@@ -1254,6 +1271,7 @@ pub use ely_documents::LinkEditor = ely_documents::link::LinkEditor
 pub use ely_documents::Margins = ely_documents::print::Margins
 pub use ely_documents::MarkdownAlertContext = ely_documents::render::alert::MarkdownAlertContext
 pub use ely_documents::MarkdownBlock = ely_documents::tree::Node
+pub use ely_documents::MarkdownContext = ely_documents::render::context::MarkdownContext
 pub use ely_documents::MarkdownDocument = ely_documents::document::MarkdownDocument
 pub use ely_documents::MarkdownEditor = ely_documents::modes::MarkdownEditor
 pub use ely_documents::MarkdownListContext = ely_documents::render::list::MarkdownListContext
