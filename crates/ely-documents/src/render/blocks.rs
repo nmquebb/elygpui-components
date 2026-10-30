@@ -1,127 +1,38 @@
 use gpui::{
-    AnyElement, App, FontWeight, IntoElement, MouseButton, ParentElement, RenderOnce, Role, Styled,
-    StyledText, Window, div, prelude::*,
+    AnyElement, App, FontWeight, IntoElement, MouseButton, ParentElement, Role, Styled, StyledText,
+    div, prelude::*,
 };
 
 use super::{Draw, point::point_lines};
 use crate::{
-    forms::Checkbox,
-    i18n,
     primitives::{FocusRing as _, Icon, IconName},
     theme::{ActiveTheme, IconSize, Radius, TextSize},
     tree::{AlertKind, DocumentHeading, Node},
 };
 
+/// The quote frame also decorates independently virtualized body fragments.
+pub(super) fn quote_frame(body: impl IntoIterator<Item = AnyElement>, cx: &App) -> gpui::Div {
+    div()
+        .flex()
+        .flex_col()
+        .gap_2()
+        .pl_4()
+        .border_l_2()
+        .border_color(cx.theme().colors.border_strong)
+        .text_color(cx.theme().colors.fg_muted)
+        .children(body)
+}
+
+#[derive(IntoElement)]
+pub(super) struct QuoteFrame(pub(super) AnyElement);
+
+impl gpui::RenderOnce for QuoteFrame {
+    fn render(self, _: &mut gpui::Window, cx: &mut App) -> impl IntoElement {
+        quote_frame([self.0], cx)
+    }
+}
+
 impl Draw<'_> {
-    /// A list; bullets turn with depth, as browsers draw them.
-    pub(super) fn list(
-        &self,
-        start: &Option<u64>,
-        items: &[(Option<bool>, Vec<Node>)],
-        cx: &App,
-    ) -> AnyElement {
-        let colors = cx.theme().colors.clone();
-        let depth = self.lists.get();
-        self.lists.set(depth + 1);
-        let bullet = match depth {
-            0 => "•",
-            1 => "◦",
-            _ => "▪",
-        };
-        let list = div()
-            .flex()
-            .flex_col()
-            .gap_1()
-            .children(items.iter().enumerate().map(|(ix, (task, body))| {
-                let marker: AnyElement = match (task, start) {
-                    (Some(done), _) => self.task_marker(*done, body, cx),
-                    (None, Some(first)) => div()
-                        .text_color(colors.fg_muted)
-                        .child(format!("{}.", first + ix as u64))
-                        .into_any_element(),
-                    (None, None) => div()
-                        .debug_selector(move || format!("markdown-bullet-{depth}"))
-                        .text_color(colors.fg_muted)
-                        .child(bullet)
-                        .into_any_element(),
-                };
-                div()
-                    .flex()
-                    .gap_2()
-                    .child(
-                        div()
-                            .flex_none()
-                            .min_w_5()
-                            .flex()
-                            .justify_end()
-                            .child(marker),
-                    )
-                    .child(
-                        div()
-                            .debug_selector(move || format!("markdown-list-body-{depth}-{ix}"))
-                            .flex_1()
-                            .min_w_0()
-                            .flex()
-                            .flex_col()
-                            .gap_1()
-                            .when(*task == Some(true), |body| {
-                                body.text_color(colors.fg_subtle)
-                            })
-                            .children(self.nodes(body, cx)),
-                    )
-            }))
-            .into_any_element();
-        self.lists.set(depth);
-        list
-    }
-
-    fn task_marker(&self, done: bool, body: &[Node], cx: &App) -> AnyElement {
-        let colors = &cx.theme().colors;
-        let task = self.tasks.get();
-        self.tasks.set(task + 1);
-        let marker = match self.hooks.on_task {
-            Some(on_task) => {
-                let on_task = on_task.clone();
-                let name = body
-                    .iter()
-                    .find_map(|node| match node {
-                        Node::Paragraph(inline) if !inline.text.is_empty() => {
-                            Some(inline.text.clone())
-                        }
-                        _ => None,
-                    })
-                    .unwrap_or_else(|| i18n::text(cx, "block.todo", &[]).to_string());
-                div()
-                    .id(self.key("task-slot"))
-                    .debug_selector(move || format!("markdown-task-{task}"))
-                    .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
-                    .on_click(|_, _, cx| cx.stop_propagation())
-                    .child(
-                        Checkbox::new(self.key("task"), done)
-                            .name(name)
-                            .on_change(move |_, window, cx| on_task(task, window, cx)),
-                    )
-                    .into_any_element()
-            }
-            None => Icon::new(if done {
-                IconName::SquareCheck
-            } else {
-                IconName::Square
-            })
-            .size(IconSize::Sm)
-            .color(if done { colors.focus } else { colors.fg_subtle })
-            .into_any_element(),
-        };
-        TaskMarker(
-            div()
-                .debug_selector(move || format!("markdown-task-marker-{task}"))
-                .flex()
-                .child(marker)
-                .into_any_element(),
-        )
-        .into_any_element()
-    }
-
     /// A GitHub alert: a colored rule, icon, title and body.
     pub(super) fn alert(&self, kind: AlertKind, body: &[Node], cx: &App) -> AnyElement {
         let colors = &cx.theme().colors;
@@ -234,18 +145,5 @@ impl Draw<'_> {
             self.hooks.on_point,
             (false, false),
         )
-    }
-}
-
-#[derive(IntoElement)]
-struct TaskMarker(AnyElement);
-
-impl RenderOnce for TaskMarker {
-    fn render(self, window: &mut Window, _: &mut App) -> impl IntoElement {
-        div()
-            .h(window.line_height())
-            .flex()
-            .items_center()
-            .child(self.0)
     }
 }

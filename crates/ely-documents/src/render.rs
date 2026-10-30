@@ -22,7 +22,9 @@ use crate::{
 mod blocks;
 mod code;
 pub(crate) use code::code_background;
+mod list;
 mod math_text;
+pub use list::MarkdownListContext;
 mod point;
 mod style;
 mod table;
@@ -57,6 +59,7 @@ pub struct MarkdownRenderer {
     /// Drawn instead of the source when given.
     blocks: Option<Rc<[Node]>>,
     pictures: Option<Rc<Pictures>>,
+    list_depth: usize,
 }
 
 impl MarkdownRenderer {
@@ -72,6 +75,7 @@ impl MarkdownRenderer {
             base: None,
             blocks: None,
             pictures: None,
+            list_depth: 0,
         }
     }
 
@@ -98,6 +102,22 @@ impl MarkdownRenderer {
     pub fn text_size(mut self, size: TextSize) -> Self {
         self.size = size;
         self
+    }
+
+    /// Enclosing list items supplied by a fragment owner; keeps nested bullet styles consistent.
+    pub fn list_depth(mut self, depth: usize) -> Self {
+        self.list_depth = depth;
+        self
+    }
+
+    /// Decorate one independently laid-out quote fragment with the document's border and padding.
+    ///
+    /// ```
+    /// use ely_documents::MarkdownRenderer;
+    /// let quote = MarkdownRenderer::quote("a quoted fragment");
+    /// ```
+    pub fn quote(content: impl IntoElement) -> impl IntoElement {
+        blocks::QuoteFrame(content.into_any_element())
     }
 
     /// Marks headings for `sections`; `outline` lists them.
@@ -275,16 +295,7 @@ impl Draw<'_> {
                     None => heading.into_any_element(),
                 }
             }
-            Node::Quote(inner) => div()
-                .flex()
-                .flex_col()
-                .gap_2()
-                .pl_4()
-                .border_l_2()
-                .border_color(colors.border_strong)
-                .text_color(colors.fg_muted)
-                .children(self.nodes(inner, cx))
-                .into_any_element(),
+            Node::Quote(inner) => blocks::quote_frame(self.nodes(inner, cx), cx).into_any_element(),
             Node::Code {
                 language,
                 text,
@@ -422,7 +433,7 @@ impl RenderOnce for MarkdownRenderer {
             code: &self.code,
             body: self.size,
             scale: 1.0,
-            lists: std::cell::Cell::new(0),
+            lists: std::cell::Cell::new(self.list_depth),
             table: std::cell::Cell::new(false),
             tables: std::cell::Cell::new(0),
             tasks: std::cell::Cell::new(0),
