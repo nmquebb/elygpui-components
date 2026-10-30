@@ -8,6 +8,7 @@ mod blocks;
 mod emoji;
 pub(crate) mod html;
 mod html_block;
+mod prefix;
 mod sources;
 mod stack;
 
