@@ -302,6 +302,7 @@ impl ely_documents::FixedFormatToolbar
 impl ely_documents::Footnote
 impl ely_documents::Glossary
 impl ely_documents::HeldPicture
+impl ely_documents::Inline
 impl ely_documents::Latex
 impl ely_documents::LinkEditor
 impl ely_documents::MarkdownAlertContext
@@ -866,6 +867,7 @@ pub fn ely_documents::HeldPicture::hash<H: core::hash::Hasher>(&self, &mut H)
 pub fn ely_documents::HeldPicture::new(gpui::platform::ImageFormat, impl core::convert::Into<alloc::rcs::arc::Arc<[u8]>>) -> Self
 pub fn ely_documents::Inline::clone(&self) -> Self
 pub fn ely_documents::Inline::default() -> Self
+pub fn ely_documents::Inline::display_prefix(&self, usize) -> Self
 pub fn ely_documents::Inline::eq(&self, &Self) -> bool
 pub fn ely_documents::Inline::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub fn ely_documents::InlineFormat::clone(&self) -> Self
