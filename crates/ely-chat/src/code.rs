@@ -12,7 +12,7 @@ use crate::{
     forms::Run,
     layout::on_axis,
     primitives::{Disclosure, IconName},
-    theme::{ActiveTheme, ControlSize, Radius, TextSize},
+    theme::{ActiveTheme, ControlSize, Radius, Syntax, TextSize},
 };
 
 /// Lines a block shows before it folds.
@@ -85,13 +85,18 @@ impl RenderOnce for CodeBlock {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let open = window.use_keyed_state((self.id.clone(), "open"), cx, |_, _| false);
         let opened = *open.read(cx);
-        let theme = cx.theme();
-        let colors = theme.colors.clone();
         let code = self.code.trim_end_matches('\n').to_string();
         let fold = fold_at(&code, FOLD_AFTER).filter(|_| !opened);
         let hidden = fold.map(|at| code[at..].lines().count() - 1);
         let shown = fold.map_or(code.as_str(), |at| &code[..at]).to_string();
-        let styles: Vec<(Range<usize>, HighlightStyle)> = code_colors(&shown, cx);
+        let shown: SharedString = shown.into();
+        let highlighted = window.use_keyed_state((self.id.clone(), "highlights"), cx, |_, cx| {
+            CodeColors::new(shown.clone(), cx)
+        });
+        highlighted.update(cx, |colors, cx| colors.refresh(shown.clone(), cx));
+        let styles = highlighted.read(cx).styles.clone();
+        let theme = cx.theme();
+        let colors = theme.colors.clone();
         let action = |key: &str, icon: IconName, tip: &'static str, run: Option<Run>| {
             run.map(|run| {
                 IconButton::new((self.id.clone(), key.to_string()), icon)
@@ -147,7 +152,7 @@ impl RenderOnce for CodeBlock {
                     .line_height(relative(1.55))
                     .text_color(colors.syntax.variable)
                     .whitespace_nowrap()
-                    .child(StyledText::new(shown).with_highlights(styles)),
+                    .child(StyledText::new(shown).with_highlights(styles.iter().cloned())),
             )
             .when(lines > FOLD_AFTER, |block| {
                 block.child(
@@ -183,9 +188,127 @@ impl RenderOnce for CodeBlock {
     }
 }
 
+struct CodeColors {
+    source: SharedString,
+    syntax: Syntax,
+    styles: Rc<[(Range<usize>, HighlightStyle)]>,
+}
+
+impl CodeColors {
+    fn new(source: SharedString, cx: &App) -> Self {
+        Self {
+            styles: highlights(&source, cx).into(),
+            source,
+            syntax: cx.theme().colors.syntax.clone(),
+        }
+    }
+
+    fn refresh(&mut self, source: SharedString, cx: &App) {
+        if self.source != source || self.syntax != cx.theme().colors.syntax {
+            *self = Self::new(source, cx);
+        }
+    }
+}
+
+fn highlights(code: &str, cx: &App) -> Vec<(Range<usize>, HighlightStyle)> {
+    let mut styles = code_colors(code, cx);
+    let base = cx.theme().colors.syntax.variable;
+    // GPUI blends highlight colors; only an opaque inherited color is redundant.
+    if base.a == 1.0 {
+        let inherited = HighlightStyle {
+            color: Some(base),
+            ..Default::default()
+        };
+        styles.retain(|(_, style)| *style != inherited);
+    }
+    styles
+}
+
 #[cfg(test)]
 mod tests {
-    use super::fold_at;
+    use super::{CodeColors, fold_at, highlights};
+    use crate::theme::{ActiveTheme, Mode, Theme};
+    use gpui::{TestAppContext, TextStyle};
+
+    #[gpui::test]
+    fn syntax_colors_preserve_inherited_and_translucent_palettes(cx: &mut TestAppContext) {
+        cx.update(|cx| {
+            Theme::init(cx);
+            for mode in [Mode::Light, Mode::Dark] {
+                Theme::set_mode_now(mode, cx);
+                for alpha in [1.0, 0.45] {
+                    cx.global_mut::<Theme>().colors.syntax.variable.a = alpha;
+                    let syntax = cx.theme().colors.syntax.clone();
+                    let base = TextStyle {
+                        color: syntax.variable,
+                        ..Default::default()
+                    };
+                    let source = "let word = 42; // comment";
+                    let styles = highlights(source, cx);
+                    let expected = [
+                        (0..3, Some(syntax.keyword)),
+                        (3..4, None),
+                        (4..8, Some(syntax.variable)),
+                        (8..9, None),
+                        (9..10, Some(syntax.operator)),
+                        (10..11, None),
+                        (11..13, Some(syntax.number)),
+                        (13..14, Some(syntax.punctuation)),
+                        (14..15, None),
+                        (15..source.len(), Some(syntax.comment)),
+                    ];
+                    for (range, color) in expected {
+                        let expected = color.map_or(base.color, |color| base.color.blend(color));
+                        for byte in range {
+                            let actual = styles
+                                .iter()
+                                .find(|(span, _)| span.contains(&byte))
+                                .map_or(base.color, |(_, style)| {
+                                    base.clone().highlight(*style).color
+                                });
+                            assert_eq!(actual, expected, "{mode:?} alpha={alpha} byte={byte}");
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    #[gpui::test]
+    fn code_colors_follow_replacements_and_palette_changes(cx: &mut TestAppContext) {
+        cx.update(|cx| {
+            Theme::init(cx);
+            let mut colors = CodeColors::new("let value".into(), cx);
+            for source in ["let value", "123 value", "123 value", "let value"] {
+                for mode in [Mode::Dark, Mode::Light] {
+                    Theme::set_mode_now(mode, cx);
+                    colors.refresh(source.into(), cx);
+                    let syntax = &cx.theme().colors.syntax;
+                    let expected = if source.starts_with("let") {
+                        syntax.keyword
+                    } else {
+                        syntax.number
+                    };
+                    assert_eq!(colors.source.as_ref(), source);
+                    for byte in 0..source.len() {
+                        let actual = colors
+                            .styles
+                            .iter()
+                            .find(|(range, _)| range.contains(&byte))
+                            .map_or(syntax.variable, |(_, style)| {
+                                TextStyle {
+                                    color: syntax.variable,
+                                    ..Default::default()
+                                }
+                                .highlight(*style)
+                                .color
+                            });
+                        assert_eq!(actual, if byte < 3 { expected } else { syntax.variable });
+                    }
+                }
+            }
+        });
+    }
 
     #[test]
     fn long_code_folds_after_its_lines() {
