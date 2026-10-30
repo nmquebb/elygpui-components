@@ -19,6 +19,8 @@ use crate::{
     theme::{ActiveTheme, TextSize},
 };
 
+mod alert;
+pub use alert::MarkdownAlertContext;
 mod blocks;
 mod code;
 pub(crate) use code::code_background;

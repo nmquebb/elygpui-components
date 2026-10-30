@@ -1,13 +1,13 @@
 use gpui::{
-    AnyElement, App, FontWeight, IntoElement, MouseButton, ParentElement, Role, Styled, StyledText,
-    div, prelude::*,
+    AnyElement, App, IntoElement, MouseButton, ParentElement, Role, Styled, StyledText, div,
+    prelude::*,
 };
 
 use super::{Draw, point::point_lines};
 use crate::{
-    primitives::{FocusRing as _, Icon, IconName},
-    theme::{ActiveTheme, IconSize, Radius, TextSize},
-    tree::{AlertKind, DocumentHeading, Node},
+    primitives::FocusRing as _,
+    theme::{ActiveTheme, Radius, TextSize},
+    tree::DocumentHeading,
 };
 
 /// The quote frame also decorates independently virtualized body fragments.
@@ -33,46 +33,6 @@ impl gpui::RenderOnce for QuoteFrame {
 }
 
 impl Draw<'_> {
-    /// A GitHub alert: a colored rule, icon, title and body.
-    pub(super) fn alert(&self, kind: AlertKind, body: &[Node], cx: &App) -> AnyElement {
-        let colors = &cx.theme().colors;
-        let (tone, icon) = match kind {
-            AlertKind::Note => (colors.info, IconName::Info),
-            AlertKind::Tip => (colors.success, IconName::Lightbulb),
-            // The palette's violet, read at 4.5:1.
-            AlertKind::Important => (colors.syntax.keyword, IconName::MessageSquareWarning),
-            AlertKind::Warning => (colors.warning, IconName::TriangleAlert),
-            AlertKind::Caution => (colors.danger, IconName::OctagonAlert),
-        };
-        div()
-            .flex()
-            .flex_col()
-            .gap_1()
-            .py_1()
-            .pl_4()
-            .border_l_2()
-            .border_color(tone)
-            .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .gap_2()
-                    .font_weight(FontWeight::MEDIUM)
-                    .text_color(tone)
-                    .child(Icon::new(icon).size(IconSize::Sm).color(tone))
-                    .child(kind.title()),
-            )
-            .child(
-                div()
-                    .flex()
-                    .flex_col()
-                    .gap_2()
-                    .text_color(colors.fg)
-                    .children(self.nodes(body, cx)),
-            )
-            .into_any_element()
-    }
-
     /// `[toc]`: each heading by depth; a press reveals it.
     pub(super) fn toc(&self, headings: &[DocumentHeading], cx: &App) -> AnyElement {
         let colors = cx.theme().colors.clone();

@@ -67,7 +67,7 @@ pub use pages::{PageCover, PageIcon};
 pub use picture::{HeldPicture, Pictures};
 pub use print::{Margins, Paper, PrintPreview, PrintSettings, sheet};
 pub use reading::{Footnote, Glossary, ReadingProgress, TooltipTerm, ZenMode};
-pub use render::{MarkdownListContext, MarkdownRenderer};
+pub use render::{MarkdownAlertContext, MarkdownListContext, MarkdownRenderer};
 pub use rich::RichTextEditor;
 pub use templates::{Template, TemplatePicker};
 pub use thumbs::PageThumbnailList;
