@@ -22,6 +22,8 @@ use crate::{
 mod alert;
 pub use alert::MarkdownAlertContext;
 mod blocks;
+mod context;
+pub use context::MarkdownContext;
 mod code;
 pub(crate) use code::code_background;
 mod list;
@@ -55,6 +57,7 @@ pub struct MarkdownRenderer {
     source: SharedString,
     on_link: Option<OnLink>,
     size: TextSize,
+    inherit_body_style: bool,
     sections: Option<Entity<Sections>>,
     code: Option<DrawCode>,
     base: Option<Arc<Path>>,
@@ -72,6 +75,7 @@ impl MarkdownRenderer {
             source: source.into(),
             on_link: None,
             size: TextSize::Base,
+            inherit_body_style: false,
             sections: None,
             code: None,
             base: None,
@@ -120,6 +124,37 @@ impl MarkdownRenderer {
     /// ```
     pub fn quote(content: impl IntoElement) -> impl IntoElement {
         blocks::QuoteFrame(content.into_any_element())
+    }
+
+    /// Inherit body typography from `wrap_fragment`; heading scale stays at `text_size`.
+    /// Defaults to false so standalone renderers establish their own body typography.
+    pub fn inherit_body_style(mut self, inherit: bool) -> Self {
+        self.inherit_body_style = inherit;
+        self
+    }
+
+    /// Decorate a fragment with outer-to-inner contexts and their leading inner gaps.
+    /// Establishes the base typography before contexts refine it, including footnotes inside lists.
+    /// Pair renderer content with `inherit_body_style(true)` and the same base `text_size`.
+    ///
+    /// ```
+    /// use ely_documents::{MarkdownContext, MarkdownRenderer};
+    /// use ely_core::theme::TextSize;
+    /// let body = MarkdownRenderer::new("fragment", "A footnote paragraph")
+    ///     .text_size(TextSize::Md).inherit_body_style(true);
+    /// let frame = MarkdownContext::Footnote { label: "1".into(), continuation: true };
+    /// let fragment = MarkdownRenderer::wrap_fragment(body, [(frame, gpui::px(0.))], TextSize::Md);
+    /// ```
+    pub fn wrap_fragment(
+        content: impl IntoElement,
+        contexts: impl IntoIterator<Item = (MarkdownContext, gpui::Pixels)>,
+        size: TextSize,
+    ) -> impl IntoElement {
+        context::Fragment {
+            content: content.into_any_element(),
+            contexts: contexts.into_iter().collect(),
+            size,
+        }
     }
 
     /// Marks headings for `sections`; `outline` lists them.
@@ -350,20 +385,9 @@ impl Draw<'_> {
                 };
                 self.point_image(drawn, *at, url, link)
             }
-            Node::Footnote { label, body } => div()
-                .flex()
-                .gap_2()
-                .text_size(theme.text_size(TextSize::Sm))
-                .text_color(colors.fg_muted)
-                .child(div().flex_none().child(format!("[{label}]")))
-                .child(
-                    div()
-                        .flex_1()
-                        .flex()
-                        .flex_col()
-                        .children(self.nodes(body, cx)),
-                )
-                .into_any_element(),
+            Node::Footnote { label, body } => {
+                context::footnote_frame(label, false, self.nodes(body, cx), cx).into_any_element()
+            }
             Node::Alert { kind, body } => self.alert(*kind, body, cx),
             Node::Toc(headings) => self.toc(headings, cx),
             Node::FrontMatter { text, from } => self.front_matter(text, *from, cx),
@@ -444,8 +468,10 @@ impl RenderOnce for MarkdownRenderer {
             .flex()
             .flex_col()
             .gap_3()
-            .text_size(theme.text_size(self.size))
-            .line_height(theme.text_size(self.size) * 1.6)
+            .when(!self.inherit_body_style, |body| {
+                body.text_size(theme.text_size(self.size))
+                    .line_height(theme.text_size(self.size) * 1.6)
+            })
             .children(draw.nodes(nodes, cx))
     }
 }

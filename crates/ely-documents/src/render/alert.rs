@@ -70,7 +70,7 @@ impl Draw<'_> {
     }
 }
 
-fn frame(
+pub(super) fn frame(
     context: MarkdownAlertContext,
     body: impl IntoIterator<Item = AnyElement>,
     cx: &App,

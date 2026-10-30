@@ -4,6 +4,8 @@ What changes for an app built on Ely, newest first. An entry names the crates it
 
 ## Unreleased
 
+- `ely-documents`: `MarkdownContext` and `MarkdownRenderer::wrap_fragment` preserve inherited typography through virtualized list, quote, alert and footnote bodies; `inherit_body_style` keeps fragment headings at the original body scale.
+
 - `ely-documents`: `MarkdownAlertContext` shares alert titles, tones and edge padding with independently virtualized body fragments.
 
 - `ely-chat`: `CodeBlock::preview` shows bounded plain text with a fade and Open in tab action; Copy retains the complete original source.
